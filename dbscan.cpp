@@ -11,6 +11,7 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <chrono>
 
 using namespace std;
 
@@ -131,42 +132,58 @@ int main() {
         labeledPoints.emplace_back(point, label);
     }
 
-    // Executa DBSCAN, que retorna a estrutura original. Nenhuma mudança aqui.
-    map<int, vector<vector<float>>> clusters = DBSCAN(points, 5, 0.5);
+    vector<float> radiusList = {0.3, 0.5, 0.7, 1.0};
+    vector<int> minPointsList = {3, 5, 7, 10};
 
-    // Cria o CSV de saída
+    // Cria o CSV de saída para resultados
     ofstream output("DBSCAN_result.csv");
-    output << "SepalLength,SepalWidth,PetalLength,PetalWidth,TrueClass,Cluster\n";
+    output << "SepalLength,SepalWidth,PetalLength,PetalWidth,TrueClass,Cluster,Radius,MinPoints\n";
 
-    // Para cada ponto original...
-    for (const auto& entry : labeledPoints) {
-        const vector<float>& features = entry.first;
-        const string& label = entry.second;
-        int foundClusterId = -1; // -1 (ruído) é o padrão se não for encontrado em nenhum cluster
+    // Cria o CSV de saída para tempos
+    ofstream timeOutput("DBSCAN_times.csv");
+    timeOutput << "Radius,MinPoints,ExecutionTimeMs\n";
 
-        // ...procure em qual cluster ele está.
-        // Isso é uma busca reversa.
-        for (const auto& pair : clusters) {
-            int currentClusterId = pair.first;
-            const vector<vector<float>>& pointsInCluster = pair.second;
+    for (float radius : radiusList) {
+        for (int minPoints : minPointsList) {
+            auto start = chrono::high_resolution_clock::now();
 
-            // Procura o ponto 'features' na lista de pontos do cluster atual
-            if (find(pointsInCluster.begin(), pointsInCluster.end(), features) != pointsInCluster.end()) {
-                foundClusterId = currentClusterId;
-                break; // Encontrou, pode parar de procurar nos outros clusters
+            map<int, vector<vector<float>>> clusters = DBSCAN(points, minPoints, radius);
+
+            auto end = chrono::high_resolution_clock::now();
+            auto duration = chrono::duration_cast<chrono::milliseconds>(end - start).count();
+
+            // Escreve tempo no CSV de tempos
+            timeOutput << radius << "," << minPoints << "," << duration << "\n";
+
+            // Para cada ponto original...
+            for (const auto& entry : labeledPoints) {
+                const vector<float>& features = entry.first;
+                const string& label = entry.second;
+                int foundClusterId = -1; // -1 (ruído) é o padrão se não for encontrado em nenhum cluster
+
+                // ...procure em qual cluster ele está.
+                for (const auto& pair : clusters) {
+                    int currentClusterId = pair.first;
+                    const vector<vector<float>>& pointsInCluster = pair.second;
+
+                    if (find(pointsInCluster.begin(), pointsInCluster.end(), features) != pointsInCluster.end()) {
+                        foundClusterId = currentClusterId;
+                        break;
+                    }
+                }
+
+                // Escreve os dados no CSV
+                for (float val : features) {
+                    output << val << ",";
+                }
+                output << label << "," << foundClusterId << "," << radius << "," << minPoints << "\n";
             }
         }
-
-        // Escreve os dados no CSV
-        for (float val : features) {
-            output << val << ",";
-        }
-        output << label << "," << foundClusterId << "\n";
     }
 
     output.close();
-    // Corrigindo também a mensagem de saída
-    cout << "Arquivo 'DBSCAN_result.csv' gerado com sucesso." << endl;
+    timeOutput.close();
+    cout << "Arquivo 'DBSCAN_result.csv' e 'DBSCAN_times.csv' gerados com sucesso." << endl;
 
     return 0;
 }

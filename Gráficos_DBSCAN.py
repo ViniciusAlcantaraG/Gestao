@@ -44,4 +44,5 @@ def create_pairplot(csv_file='DBSCAN_result.csv'):
 
 # Executa a função
 if __name__ == '__main__':
-    create_pairplot()
+    #create_pairplot('DBSCAN_result.csv')
+    create_pairplot('Kohonen_result.csv')

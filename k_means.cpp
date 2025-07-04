@@ -9,6 +9,8 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <chrono>
+#include <numeric> 
 
 using namespace std;
 
@@ -60,7 +62,7 @@ vector<vector<float>> PickRandomCentroids(int k, vector<vector<float>> points) {
 vector<vector<float>> CalculateNewCentroids(map<int, vector<vector<float>>>& clusters, vector<vector<float>> centroids) {
     for (int i = 0; i < centroids.size(); ++i) {
         if (clusters[i].empty()) continue;
-        vector<float> means(centroids[0].size(), 0.0f);
+        vector<float> means(centroids[0].size(), 0.0);
         for (auto& point : clusters[i]) {
             for (int k = 0; k < point.size(); ++k) {
                 means[k] += point[k];
@@ -113,7 +115,8 @@ vector<vector<string>> ReadCsv(const string& filename) {
 }
 
 int main() {
-    int numberOfClusters = 3;
+    vector<int> rangeOfClusters(50);
+    iota(rangeOfClusters.begin(), rangeOfClusters.end(), 1);
 
     vector<vector<string>> data = ReadCsv("Iris.csv");
     vector<vector<float>> points;
@@ -129,33 +132,46 @@ int main() {
         labeledPoints.emplace_back(point, label);
     }
 
-    // Executa KMeans
-    map<int, vector<vector<float>>> clusters = KMeans(numberOfClusters, points);
+    ofstream timeOutput("K_means_times.csv");
+    timeOutput << "Clusters,TimeMicroseconds\n";
 
-    // Associa cada ponto ao cluster a que pertence
-    map<vector<float>, int> pointToCluster;
-    for (const auto& pair : clusters) {
-        int clusterId = pair.first;
-        for (const auto& point : pair.second) {
-            pointToCluster[point] = clusterId;
-        }
-    }
-
-    // Cria o CSV de saída
+    // Open a single output file for all results
     ofstream output("K_means_result.csv");
-    output << "SepalLength,SepalWidth,PetalLength,PetalWidth,TrueClass,Cluster\n";
+    output << "K,SepalLength,SepalWidth,PetalLength,PetalWidth,TrueClass,Cluster\n";
 
-    for (const auto& entry : labeledPoints) {
-        const vector<float>& features = entry.first;
-        const string& label = entry.second;
-        for (float val : features) {
-            output << val << ",";
+    for (int p = 0; p < rangeOfClusters.size(); ++p){
+        int numberOfClusters = rangeOfClusters[p];
+        auto beg = chrono::high_resolution_clock::now();
+        map<int, vector<vector<float>>> clusters = KMeans(numberOfClusters, points);
+        auto end = chrono::high_resolution_clock::now();
+
+        map<vector<float>, int> pointToCluster;
+        for (const auto& pair : clusters) {
+            int clusterId = pair.first;
+            for (const auto& point : pair.second) {
+                pointToCluster[point] = clusterId;
+            }
         }
-        output << label << "," << pointToCluster[features] << "\n";
+        auto duration = chrono::duration_cast<chrono::microseconds>(end - beg);
+
+        timeOutput << numberOfClusters << "," << duration.count() << "\n";
+
+        // Write all results to the single CSV, including k value
+        for (const auto& entry : labeledPoints) {
+            const vector<float>& features = entry.first;
+            const string& label = entry.second;
+            output << numberOfClusters << ",";
+            for (float val : features) {
+                output << val << ",";
+            }
+            output << label << "," << pointToCluster[features] << "\n";
+        }
+
+        cout << "Iteração para k=" << numberOfClusters << " concluída." << endl;
     }
-
     output.close();
+    timeOutput.close();
     cout << "Arquivo 'K_means_result.csv' gerado com sucesso." << endl;
-
+    cout << "Arquivo 'K_means_times.csv' gerado com sucesso." << endl;
     return 0;
 }

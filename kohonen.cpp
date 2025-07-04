@@ -9,14 +9,17 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <chrono>
+
 
 using namespace std;
 
 class Neuron {
 public:
+    int row, col;
     vector<float> weights;
 
-    Neuron(int dimensions) {
+    Neuron(int dimensions, int row_, int col_) : row(row_), col(col_) {
         random_device rd;
         mt19937 gen(rd());
         uniform_real_distribution<float> dist(-1.0, 1.0);
@@ -58,54 +61,70 @@ float CalculateDistance(const vector<float>& a, const vector<float>& b) {
     return sqrt(dist);
 }
 
-int PickClosestNeuronIndex(const vector<Neuron>& neurons, const vector<float>& input) {
-    float minDist = CalculateDistance(neurons[0].weights, input);
-    int closestIndex = 0;
-
-    for (int i = 1; i < neurons.size(); ++i) {
-        float dist = CalculateDistance(neurons[i].weights, input);
-        if (dist < minDist) {
-            minDist = dist;
-            closestIndex = i;
+// Find BMU (Best Matching Unit) in the 2D grid
+pair<int, int> PickBMU(const vector<vector<Neuron>>& network, const vector<float>& input) {
+    float minDist = -1;
+    pair<int, int> bmu = {0, 0};
+    for (int i = 0; i < network.size(); ++i) {
+        for (int j = 0; j < network[i].size(); ++j) {
+            float dist = 0;
+            for (int k = 0; k < input.size(); ++k) {
+                dist += pow(input[k] - network[i][j].weights[k], 2);
+            }
+            dist = sqrt(dist);
+            if (minDist < 0 || dist < minDist) {
+                minDist = dist;
+                bmu = {i, j};
+            }
         }
     }
-
-    return closestIndex;
+    return bmu;
 }
 
-void UpdateWeights(Neuron& neuron, const vector<float>& input, float learningRate) {
-    for (int i = 0; i < neuron.weights.size(); ++i) {
-        neuron.weights[i] += learningRate * (input[i] - neuron.weights[i]);
-    }
-}
-
-void DecayLearningRate(float& learningRate, float gamma) {
-    learningRate *= gamma;
-}
-void UpdateWeightsWithNeighborhood(vector<Neuron>& neurons, int closestIndex, const vector<float>& input, float learningRate, float sigma) {
-    for (int i = 0; i < neurons.size(); ++i) {
-        float distance = static_cast<float>(abs(i - closestIndex));
-        if (distance <= sigma) {
-            float neighborhoodFactor = exp(-distance * distance / (2 * sigma * sigma));
-            for (int j = 0; j < neurons[i].weights.size(); ++j) {
-                neurons[i].weights[j] += learningRate * neighborhoodFactor * (input[j] - neurons[i].weights[j]);
+// Update weights for all neurons in the 2D grid using neighborhood function
+void UpdateWeightsWithNeighborhood2D(vector<vector<Neuron>>& network, pair<int, int> bmu, float eta, float sigma, const vector<float>& input) {
+    int rows = network.size();
+    int cols = network[0].size();
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            float r = sqrt(pow(bmu.first - i, 2) + pow(bmu.second - j, 2));
+            float neighborhood = exp(- (r * r) / (2 * sigma * sigma));
+            for (int k = 0; k < input.size(); ++k) {
+                network[i][j].weights[k] += neighborhood * (input[k] - network[i][j].weights[k]) * eta;
             }
         }
     }
 }
 
-void TrainKohonenNetwork(vector<Neuron>& neurons, const vector<vector<float>>& inputs, int epochs, float initialLearningRate, float gamma) {
-    float learningRate = initialLearningRate;
+// Linear decay for learning rate
+void LinearDecayLearningRate(float& learningRate, int k, int maxIterations) {
+    learningRate *= (1.0f - (float(k) / float(maxIterations)));
+}
 
+// Linear decay for sigma
+float LinearSigma(int k, int maxIterations, int rows, int cols) {
+    float initialSigma = max(rows, cols) / 2.0f;
+    return initialSigma * (1.0f - (float(k) / float(maxIterations)));
+}
+
+// Train SOM using 2D grid
+void TrainKohonenNetwork2D(vector<vector<Neuron>>& network, const vector<vector<float>>& inputs, int epochs, float initialLearningRate) {
+    int rows = network.size();
+    int cols = network[0].size();
+    float learningRate = initialLearningRate;
     for (int epoch = 0; epoch < epochs; ++epoch) {
         for (const auto& input : inputs) {
-            int closestIndex = PickClosestNeuronIndex(neurons, input);
-            UpdateWeights(neurons[closestIndex], input, learningRate);
-            float sigma = neurons.size() / 2.0f;
-            UpdateWeightsWithNeighborhood(neurons, closestIndex, input, learningRate, sigma);
+            auto bmu = PickBMU(network, input);
+            float sigma = LinearSigma(epoch, epochs, rows, cols);
+            UpdateWeightsWithNeighborhood2D(network, bmu, learningRate, sigma, input);
         }
-        DecayLearningRate(learningRate, gamma);
+        LinearDecayLearningRate(learningRate, epoch, epochs);
     }
+}
+
+// Assign each point to the closest neuron (returns cluster id as integer)
+int GetClusterId(int row, int col, int cols) {
+    return row * cols + col;
 }
 
 int main() {
@@ -124,39 +143,61 @@ int main() {
         labeledPoints.emplace_back(point, label);
     }
 
-    int numNeurons = 3;
+    // Parameter ranges
+    vector<int> rowOptions = {2, 5};
+    vector<int> colOptions = {2, 5};
+    vector<float> learningRates = {0.1, 0.2, 0.5};
     int epochs = 100;
-    float initialLearningRate = 0.5f;
-    float gamma = 0.95f;
 
-    vector<Neuron> neurons;
-    for (int i = 0; i < numNeurons; ++i) {
-        neurons.emplace_back(points[0].size());
-    }
-
-    TrainKohonenNetwork(neurons, points, epochs, initialLearningRate, gamma);
-
-    // Assign each point to the closest neuron
-    vector<int> pointClusterAssignments(points.size());
-    for (size_t i = 0; i < points.size(); ++i) {
-        pointClusterAssignments[i] = PickClosestNeuronIndex(neurons, points[i]);
-    }
-
-    // Create output CSV
+    // Prepare output files
     ofstream output("Kohonen_result.csv");
-    output << "SepalLength,SepalWidth,PetalLength,PetalWidth,TrueClass,Cluster\n";
+    output << "Rows,Cols,LearningRate,SepalLength,SepalWidth,PetalLength,PetalWidth,TrueClass,Cluster\n";
+    ofstream timing("Kohonen_times.csv");
+    timing << "Rows,Cols,LearningRate,TimeMs\n";
 
-    for (size_t i = 0; i < labeledPoints.size(); ++i) {
-        const vector<float>& features = labeledPoints[i].first;
-        const string& label = labeledPoints[i].second;
-        for (float val : features) {
-            output << val << ",";
+    for (int rows : rowOptions) {
+        for (int cols : colOptions) {
+            for (float initialLearningRate : learningRates) {
+                auto start = chrono::high_resolution_clock::now();
+
+                // Initialize 2D grid of neurons
+                vector<vector<Neuron>> network(rows, vector<Neuron>(cols, Neuron(points[0].size(), 0, 0)));
+                for (int i = 0; i < rows; ++i) {
+                    for (int j = 0; j < cols; ++j) {
+                        network[i][j] = Neuron(points[0].size(), i, j);
+                    }
+                }
+
+                TrainKohonenNetwork2D(network, points, epochs, initialLearningRate);
+
+                // Assign each point to the closest neuron (BMU)
+                vector<int> pointClusterAssignments(points.size());
+                for (size_t i = 0; i < points.size(); ++i) {
+                    auto bmu = PickBMU(network, points[i]);
+                    pointClusterAssignments[i] = GetClusterId(bmu.first, bmu.second, cols);
+                }
+
+                // Write results to CSV
+                for (size_t i = 0; i < labeledPoints.size(); ++i) {
+                    const vector<float>& features = labeledPoints[i].first;
+                    const string& label = labeledPoints[i].second;
+                    output << rows << "," << cols << "," << initialLearningRate << ",";
+                    for (float val : features) {
+                        output << val << ",";
+                    }
+                    output << label << "," << pointClusterAssignments[i] << "\n";
+                }
+
+                auto end = chrono::high_resolution_clock::now();
+                auto duration = chrono::duration_cast<chrono::milliseconds>(end - start).count();
+                timing << rows << "," << cols << "," << initialLearningRate << "," << duration << "\n";
+            }
         }
-        output << label << "," << pointClusterAssignments[i] << "\n";
     }
 
     output.close();
-    cout << "Arquivo 'Kohonen_result.csv' gerado com sucesso." << endl;
+    timing.close();
+    cout << "Arquivo 'Kohonen_result.csv' e 'Kohonen_times.csv' gerados com sucesso." << endl;
 
     return 0;
 }
