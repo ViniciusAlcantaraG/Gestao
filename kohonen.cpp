@@ -189,7 +189,7 @@ int main() {
                 }
 
                 auto end = chrono::high_resolution_clock::now();
-                auto duration = chrono::duration_cast<chrono::milliseconds>(end - start).count();
+                auto duration = chrono::duration_cast<chrono::microseconds>(end - start).count();
                 timing << rows << "," << cols << "," << initialLearningRate << "," << duration << "\n";
             }
         }

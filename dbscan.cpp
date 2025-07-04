@@ -150,7 +150,7 @@ int main() {
             map<int, vector<vector<float>>> clusters = DBSCAN(points, minPoints, radius);
 
             auto end = chrono::high_resolution_clock::now();
-            auto duration = chrono::duration_cast<chrono::milliseconds>(end - start).count();
+            auto duration = chrono::duration_cast<chrono::microseconds>(end - start).count();
 
             // Escreve tempo no CSV de tempos
             timeOutput << radius << "," << minPoints << "," << duration << "\n";
