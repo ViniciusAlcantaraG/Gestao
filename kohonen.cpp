@@ -103,8 +103,8 @@ void LinearDecayLearningRate(float& learningRate, int k, int maxIterations) {
 
 // Linear decay for sigma
 float LinearSigma(int k, int maxIterations, int rows, int cols) {
-    float initialSigma = max(rows, cols) / 2.0f;
-    return initialSigma * (1.0f - (float(k) / float(maxIterations)));
+    float initialSigma = max(rows, cols) / 2;
+    return initialSigma * (1 - (float(k) / float(maxIterations)));
 }
 
 // Train SOM using 2D grid
