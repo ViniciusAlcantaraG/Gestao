@@ -144,8 +144,7 @@ int main() {
     }
 
     // Parameter ranges
-    vector<int> rowOptions = {2, 5};
-    vector<int> colOptions = {2, 5};
+    vector<int> lineOptions = {2, 3, 4, 5};
     vector<float> learningRates = {0.1, 0.2, 0.5};
     int epochs = 100;
 
@@ -155,15 +154,14 @@ int main() {
     ofstream timing("Kohonen_times.csv");
     timing << "Rows,Cols,LearningRate,TimeMs\n";
 
-    for (int rows : rowOptions) {
-        for (int cols : colOptions) {
+    for (int line : lineOptions){
             for (float initialLearningRate : learningRates) {
                 auto start = chrono::high_resolution_clock::now();
 
                 // Initialize 2D grid of neurons
-                vector<vector<Neuron>> network(rows, vector<Neuron>(cols, Neuron(points[0].size(), 0, 0)));
-                for (int i = 0; i < rows; ++i) {
-                    for (int j = 0; j < cols; ++j) {
+                vector<vector<Neuron>> network(line, vector<Neuron>(line, Neuron(points[0].size(), 0, 0)));
+                for (int i = 0; i < line; ++i) {
+                    for (int j = 0; j < line; ++j) {
                         network[i][j] = Neuron(points[0].size(), i, j);
                     }
                 }
@@ -174,14 +172,14 @@ int main() {
                 vector<int> pointClusterAssignments(points.size());
                 for (size_t i = 0; i < points.size(); ++i) {
                     auto bmu = PickBMU(network, points[i]);
-                    pointClusterAssignments[i] = GetClusterId(bmu.first, bmu.second, cols);
+                    pointClusterAssignments[i] = GetClusterId(bmu.first, bmu.second, line);
                 }
 
                 // Write results to CSV
                 for (size_t i = 0; i < labeledPoints.size(); ++i) {
                     const vector<float>& features = labeledPoints[i].first;
                     const string& label = labeledPoints[i].second;
-                    output << rows << "," << cols << "," << initialLearningRate << ",";
+                    output << line << "," << line << "," << initialLearningRate << ",";
                     for (float val : features) {
                         output << val << ",";
                     }
@@ -190,10 +188,10 @@ int main() {
 
                 auto end = chrono::high_resolution_clock::now();
                 auto duration = chrono::duration_cast<chrono::microseconds>(end - start).count();
-                timing << rows << "," << cols << "," << initialLearningRate << "," << duration << "\n";
+                timing << line << "," << line << "," << initialLearningRate << "," << duration << "\n";
             }
         }
-    }
+    
 
     output.close();
     timing.close();
